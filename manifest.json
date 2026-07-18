@@ -2,9 +2,9 @@
   "id": "webview-screenshot",
   "name": "Universal Webview Screenshot",
   "version": "1.0.0",
-  "minAppVersion": "1.0.0",
-  "description": "Capture screenshots of any webview pane in Obsidian and insert them seamlessly into notes with customizable timestamps.",
-  "author": "Your Name",
-  "authorUrl": "",
+  "minAppVersion": "1.4.0",
+  "description": "Capture region-specific screenshots from any webview in Obsidian and instantly embed them into your notes with timestamps.",
+  "author": "adarshkshitij",
+  "authorUrl": "https://github.com/adarshkshitij",
   "isDesktopOnly": true
 }

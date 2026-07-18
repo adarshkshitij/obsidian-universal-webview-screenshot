@@ -1,0 +1,12 @@
+/* Universal Webview Screenshot — plugin styles */
+
+/* Overlay drawn during region selection */
+.wvs-overlay {
+	/* Styled inline via JS to keep DOM isolation; reserved for future CSS overrides */
+}
+
+/* Selection rectangle drawn while the user drags */
+.wvs-selection-box {
+	/* Styled inline via JS; reserved for future CSS overrides */
+	pointer-events: none;
+}

@@ -1,7 +1,10 @@
-import { App, Editor, MarkdownView, Notice, Plugin, WorkspaceLeaf, normalizePath, TFile } from 'obsidian';
+import { MarkdownView, Notice, Plugin, WorkspaceLeaf, normalizePath } from 'obsidian';
 import { WebviewScreenshotSettingTab, DEFAULT_SETTINGS, WebviewScreenshotSettings } from './settings';
 import { formatSessionCounter, generateFilename, getWallClockTimestamp } from './utils';
 
+/**
+ * Represents a rectangular region on screen for cropped captures.
+ */
 interface CaptureRect {
 	x: number;
 	y: number;
@@ -9,34 +12,45 @@ interface CaptureRect {
 	height: number;
 }
 
+/**
+ * Universal Webview Screenshot plugin.
+ *
+ * Tracks the most recently focused webview and Markdown pane,
+ * then captures a screenshot (full or user-defined region) and
+ * appends a formatted image block to the active note.
+ */
 export default class WebviewScreenshotPlugin extends Plugin {
 	settings: WebviewScreenshotSettings;
-	
-	lastMarkdownLeaf: WorkspaceLeaf | null = null;
-	lastWebviewLeaf: WorkspaceLeaf | null = null;
-	
-	sessionStartTime: number | null = null;
+
+	/** The most recently focused Markdown leaf. */
+	private lastMarkdownLeaf: WorkspaceLeaf | null = null;
+
+	/** The most recently focused leaf containing a webview. */
+	private lastWebviewLeaf: WorkspaceLeaf | null = null;
+
+	/** Timestamp (ms) when the first capture of this session occurred, used for session counters. */
+	private sessionStartTime: number | null = null;
+
+	/** The saved crop region from the last "define region" operation. */
 	captureRegion: CaptureRect | null = null;
 
 	async onload() {
 		await this.loadSettings();
-
 		this.addSettingTab(new WebviewScreenshotSettingTab(this.app, this));
 
-		// Track focus changes to remember the last markdown and webview leaves
+		// Keep track of the last focused webview and Markdown leaf
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
 				if (!leaf) return;
-				
+
 				const view = leaf.view;
+
 				if (view instanceof MarkdownView) {
 					this.lastMarkdownLeaf = leaf;
 				}
-				
-				// Check if the leaf contains a webview
-				const webview = view.containerEl.querySelector('webview');
-				if (webview) {
-					// If the webview leaf changed, reset the session timer
+
+				if (view.containerEl.querySelector('webview')) {
+					// Reset the session timer when the user switches to a different webview
 					if (this.lastWebviewLeaf !== leaf) {
 						this.sessionStartTime = null;
 					}
@@ -47,64 +61,67 @@ export default class WebviewScreenshotPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'define-capture-region',
-			name: 'Define capture region (draw box)',
-			callback: () => {
-				this.startRegionSelection();
-			}
+			name: 'Define capture region',
+			callback: () => this.startRegionSelection(),
 		});
 
 		this.addCommand({
 			id: 'capture-region-screenshot',
-			name: 'Capture selected region screenshot',
+			name: 'Capture screenshot of defined region',
 			callback: async () => {
 				if (!this.captureRegion) {
-					new Notice('No capture region defined! Please use "Define capture region" first.');
+					new Notice('No capture region defined. Use "Define capture region" first.');
 					return;
 				}
 				await this.captureScreenshot(this.captureRegion);
-			}
+			},
 		});
 	}
 
+	/**
+	 * Shows a drag-to-select overlay over the webview.
+	 * Once the user releases the mouse, the selected rect is saved as `captureRegion`.
+	 */
 	startRegionSelection() {
 		if (!this.lastWebviewLeaf) {
-			new Notice('No webview pane has been focused recently.');
+			new Notice('No webview pane has been focused. Open a webview and click inside it first.');
 			return;
 		}
 
 		const webviewEl = this.lastWebviewLeaf.view.containerEl.querySelector('webview') as HTMLElement;
 		if (!webviewEl) {
-			new Notice('Could not find webview in the tracked pane.');
+			new Notice('Could not locate the webview element.');
 			return;
 		}
 
-		// Create the overlay container
 		const container = webviewEl.parentElement;
 		if (!container) return;
 
-		// Ensure container is relatively positioned if it's not already
-		const computedStyle = window.getComputedStyle(container);
-		if (computedStyle.position === 'static') {
+		// Ensure the parent is positioned so our absolute overlay aligns correctly
+		if (window.getComputedStyle(container).position === 'static') {
 			container.style.position = 'relative';
 		}
 
+		// Dimmed overlay that covers the entire webview
 		const overlay = document.createElement('div');
-		overlay.style.position = 'absolute';
-		overlay.style.top = '0';
-		overlay.style.left = '0';
-		overlay.style.width = '100%';
-		overlay.style.height = '100%';
-		overlay.style.zIndex = '999999';
-		overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
-		overlay.style.cursor = 'crosshair';
+		overlay.className = 'wvs-overlay';
+		overlay.style.cssText = `
+			position: absolute; inset: 0;
+			z-index: 999999;
+			background: rgba(0,0,0,0.35);
+			cursor: crosshair;
+		`;
 
+		// Visual selection box drawn while dragging
 		const selectionBox = document.createElement('div');
-		selectionBox.style.position = 'absolute';
-		selectionBox.style.border = '2px dashed #00a8ff';
-		selectionBox.style.backgroundColor = 'rgba(0, 168, 255, 0.2)';
-		selectionBox.style.display = 'none';
+		selectionBox.className = 'wvs-selection-box';
+		selectionBox.style.cssText = `
+			position: absolute;
+			border: 2px dashed #7c6af7;
+			background: rgba(124,106,247,0.15);
+			display: none;
+		`;
 		overlay.appendChild(selectionBox);
-
 		container.appendChild(overlay);
 
 		let startX = 0, startY = 0;
@@ -112,60 +129,50 @@ export default class WebviewScreenshotPlugin extends Plugin {
 
 		const onMouseDown = (e: MouseEvent) => {
 			isDrawing = true;
-			const rect = overlay.getBoundingClientRect();
-			startX = e.clientX - rect.left;
-			startY = e.clientY - rect.top;
-			selectionBox.style.left = startX + 'px';
-			selectionBox.style.top = startY + 'px';
-			selectionBox.style.width = '0px';
-			selectionBox.style.height = '0px';
-			selectionBox.style.display = 'block';
+			const bounds = overlay.getBoundingClientRect();
+			startX = e.clientX - bounds.left;
+			startY = e.clientY - bounds.top;
+			Object.assign(selectionBox.style, {
+				left: `${startX}px`, top: `${startY}px`,
+				width: '0px', height: '0px', display: 'block',
+			});
 		};
 
 		const onMouseMove = (e: MouseEvent) => {
 			if (!isDrawing) return;
-			const rect = overlay.getBoundingClientRect();
-			const currentX = e.clientX - rect.left;
-			const currentY = e.clientY - rect.top;
-			
-			const width = Math.abs(currentX - startX);
-			const height = Math.abs(currentY - startY);
-			const left = Math.min(currentX, startX);
-			const top = Math.min(currentY, startY);
-			
-			selectionBox.style.width = width + 'px';
-			selectionBox.style.height = height + 'px';
-			selectionBox.style.left = left + 'px';
-			selectionBox.style.top = top + 'px';
+			const bounds = overlay.getBoundingClientRect();
+			const cx = e.clientX - bounds.left;
+			const cy = e.clientY - bounds.top;
+			Object.assign(selectionBox.style, {
+				left:   `${Math.min(cx, startX)}px`,
+				top:    `${Math.min(cy, startY)}px`,
+				width:  `${Math.abs(cx - startX)}px`,
+				height: `${Math.abs(cy - startY)}px`,
+			});
 		};
 
 		const onMouseUp = (e: MouseEvent) => {
 			if (!isDrawing) return;
 			isDrawing = false;
-			
-			const rect = overlay.getBoundingClientRect();
-			const currentX = e.clientX - rect.left;
-			const currentY = e.clientY - rect.top;
-			
-			const width = Math.abs(currentX - startX);
-			const height = Math.abs(currentY - startY);
-			const left = Math.min(currentX, startX);
-			const top = Math.min(currentY, startY);
-			
-			if (width > 10 && height > 10) {
-				// Save region coordinates
+
+			const bounds = overlay.getBoundingClientRect();
+			const cx = e.clientX - bounds.left;
+			const cy = e.clientY - bounds.top;
+			const w = Math.abs(cx - startX);
+			const h = Math.abs(cy - startY);
+
+			if (w > 10 && h > 10) {
 				this.captureRegion = {
-					x: Math.round(left),
-					y: Math.round(top),
-					width: Math.round(width),
-					height: Math.round(height)
+					x: Math.round(Math.min(cx, startX)),
+					y: Math.round(Math.min(cy, startY)),
+					width: Math.round(w),
+					height: Math.round(h),
 				};
-				new Notice(`Capture region defined! (${Math.round(width)}x${Math.round(height)})`);
+				new Notice(`Capture region set (${Math.round(w)}×${Math.round(h)} px).`);
 			} else {
-				new Notice('Region selection cancelled (too small).');
+				new Notice('Region too small — selection cancelled.');
 			}
-			
-			// Clean up
+
 			overlay.removeEventListener('mousedown', onMouseDown);
 			overlay.removeEventListener('mousemove', onMouseMove);
 			window.removeEventListener('mouseup', onMouseUp);
@@ -177,109 +184,97 @@ export default class WebviewScreenshotPlugin extends Plugin {
 		window.addEventListener('mouseup', onMouseUp);
 	}
 
+	/**
+	 * Captures the webview (optionally cropped to `rect`) and inserts
+	 * the formatted image block at the end of the active Markdown note.
+	 */
 	async captureScreenshot(rect?: CaptureRect) {
 		if (!this.lastWebviewLeaf) {
-			new Notice('No webview pane has been focused recently.');
+			new Notice('No webview pane has been focused. Open a webview and click inside it first.');
 			return;
 		}
-
 		if (!this.lastMarkdownLeaf) {
-			new Notice('No Markdown note has been focused recently.');
+			new Notice('No Markdown note has been focused. Click inside a note first.');
 			return;
 		}
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const webviewEl = this.lastWebviewLeaf.view.containerEl.querySelector('webview') as any;
 		if (!webviewEl) {
-			new Notice('Could not find webview in the tracked pane.');
+			new Notice('Could not locate the webview element.');
 			return;
 		}
-		
-		// If using session counter and this is the first capture for this pair, set start time
+
 		if (this.settings.timestampMode === 'session-counter' && this.sessionStartTime === null) {
 			this.sessionStartTime = Date.now();
 		}
 
 		try {
-			// Electron capturePage API allows passing an optional rect
-			const captureOptions = rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined;
-			const image = await webviewEl.capturePage(captureOptions);
-			
-			let buffer;
-			const ext = this.settings.screenshotFormat === 'image/jpeg' ? 'jpeg' : 'png';
-			
-			if (this.settings.screenshotFormat === 'image/jpeg') {
-				// toJPEG takes an integer quality from 0-100
-				buffer = image.toJPEG(Math.round(this.settings.screenshotQuality * 100));
-			} else {
-				buffer = image.toPNG();
-			}
-			
-			// Ensure attachments folder exists
-			const attachmentsPath = normalizePath(this.settings.attachmentsFolder);
-			const folderExists = await this.app.vault.adapter.exists(attachmentsPath);
-			if (!folderExists) {
-				await this.app.vault.createFolder(attachmentsPath);
+			const captureArgs = rect
+				? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+				: undefined;
+
+			const image = await webviewEl.capturePage(captureArgs);
+
+			const isJpeg = this.settings.screenshotFormat === 'image/jpeg';
+			const ext    = isJpeg ? 'jpg' : 'png';
+			const buffer = isJpeg
+				? image.toJPEG(Math.round(this.settings.screenshotQuality * 100))
+				: image.toPNG();
+
+			// Create the attachments folder if it does not yet exist
+			const folder = normalizePath(this.settings.attachmentsFolder);
+			if (!(await this.app.vault.adapter.exists(folder))) {
+				await this.app.vault.createFolder(folder);
 			}
 
-			// Generate filename and save image
-			const filename = generateFilename(`Screenshot`) + `.` + ext;
-			const filePath = normalizePath(`${attachmentsPath}/${filename}`);
-			await this.app.vault.createBinary(filePath, buffer);
+			const filename = `${generateFilename('Screenshot')}.${ext}`;
+			await this.app.vault.createBinary(normalizePath(`${folder}/${filename}`), buffer);
 
-			// Determine timestamp string
-			let timestampStr = '';
-			if (this.settings.timestampMode === 'session-counter') {
-				const elapsed = Date.now() - (this.sessionStartTime || Date.now());
-				timestampStr = formatSessionCounter(elapsed);
-			} else {
-				timestampStr = getWallClockTimestamp();
-			}
+			// Build the timestamp string
+			const timestampStr = this.settings.timestampMode === 'session-counter'
+				? formatSessionCounter(Date.now() - (this.sessionStartTime ?? Date.now()))
+				: getWallClockTimestamp();
 
-			// Format the insertion block
-			let block = this.settings.screenshotTemplate;
-			block = block.replace(/\{\{SCREENSHOT\}\}/g, `[[${filename}]]`);
-			block = block.replace(/\{\{TIMESTAMP\}\}/g, timestampStr);
-			
-			// Insert into the Markdown note
+			// Apply the user's insertion template
+			let block = this.settings.screenshotTemplate
+				.replace(/\{\{SCREENSHOT\}\}/g, `[[${filename}]]`)
+				.replace(/\{\{TIMESTAMP\}\}/g, timestampStr);
+
 			const view = this.lastMarkdownLeaf.view;
-			if (view instanceof MarkdownView) {
-				const editor = view.editor;
-				
-				// Append to the end of the document
-				const lastLine = editor.lastLine();
-				const lastLineLength = editor.getLine(lastLine).length;
-				const endPos = { line: lastLine, ch: lastLineLength };
-				
-				// Make sure we start on a new line if the current line isn't empty
-				const lineContent = editor.getLine(lastLine);
-				if (lineContent.trim() !== '') {
-					block = '\n' + block;
-				}
-				
-				editor.replaceRange(block, endPos);
-				
-				// Move cursor to the end of the newly inserted block
-				const newLastLine = editor.lastLine();
-				const newLastLineLength = editor.getLine(newLastLine).length;
-				editor.setCursor({ line: newLastLine, ch: newLastLineLength });
-				
-				// Focus the editor if setting is enabled
-				if (this.settings.focusNoteAfterCapture) {
-					this.app.workspace.setActiveLeaf(this.lastMarkdownLeaf, { focus: true });
-				}
-				
-				new Notice('Screenshot captured successfully.');
-			} else {
-				new Notice('Tracked Markdown pane is no longer a Markdown view.');
+			if (!(view instanceof MarkdownView)) {
+				new Notice('The tracked Markdown pane is no longer active.');
+				return;
 			}
-		} catch (e) {
-			console.error('Webview screenshot capture failed', e);
-			new Notice('Failed to capture webview screenshot. See console for details.');
+
+			const editor   = view.editor;
+			const lastLine = editor.lastLine();
+			const lastCh   = editor.getLine(lastLine).length;
+
+			// Prepend a newline if the last line is not empty
+			if (editor.getLine(lastLine).trim() !== '') {
+				block = '\n' + block;
+			}
+
+			editor.replaceRange(block, { line: lastLine, ch: lastCh });
+
+			// Move cursor to end of inserted block
+			const newLast = editor.lastLine();
+			editor.setCursor({ line: newLast, ch: editor.getLine(newLast).length });
+
+			if (this.settings.focusNoteAfterCapture) {
+				this.app.workspace.setActiveLeaf(this.lastMarkdownLeaf, { focus: true });
+			}
+
+			new Notice('Screenshot captured and inserted.');
+		} catch (err) {
+			console.error('[Universal Webview Screenshot] Capture failed:', err);
+			new Notice('Screenshot failed. Check the developer console for details.');
 		}
 	}
 
 	onunload() {
-
+		// Nothing to clean up
 	}
 
 	async loadSettings() {
