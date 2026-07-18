@@ -31,8 +31,8 @@ Obsidian's split-pane workflow is great for taking notes while reading or watchi
 
 | Command | Suggested hotkey | What it does |
 |---|---|---|
-| **Define capture region** | `Alt+K` | Shows a drag overlay; draw a box over the area you want to capture. |
-| **Capture screenshot of defined region** | `Alt+G` | Captures the saved region and inserts it into your active note. |
+| **Define capture region** | `Alt+R` | Shows a drag overlay; draw a box over the area you want to capture. |
+| **Capture screenshot of defined region** | `Alt+S` | Captures the saved region and inserts it into your active note. |
 
 Assign hotkeys in **Settings → Hotkeys** — search for "webview screenshot".
 
