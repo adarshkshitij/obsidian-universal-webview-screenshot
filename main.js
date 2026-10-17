@@ -138,11 +138,13 @@ var WebviewScreenshotPlugin = class extends import_obsidian2.Plugin {
     this.addCommand({
       id: "define-capture-region",
       name: "Define capture region",
+      hotkeys: [{ modifiers: ["Alt"], key: "r" }],
       callback: () => this.startRegionSelection()
     });
     this.addCommand({
       id: "capture-region-screenshot",
       name: "Capture screenshot of defined region",
+      hotkeys: [{ modifiers: ["Alt"], key: "c" }],
       callback: async () => {
         if (!this.captureRegion) {
           new import_obsidian2.Notice('No capture region defined. Use "Define capture region" first.');
@@ -289,12 +291,13 @@ var WebviewScreenshotPlugin = class extends import_obsidian2.Plugin {
         return;
       }
       const editor = view.editor;
-      const lastLine = editor.lastLine();
-      const lastCh = editor.getLine(lastLine).length;
-      if (editor.getLine(lastLine).trim() !== "") {
+      const cursor = editor.getCursor();
+      const curLine = cursor.line;
+      const curCh = editor.getLine(curLine).length;
+      if (!block.startsWith("\n")) {
         block = "\n" + block;
       }
-      editor.replaceRange(block, { line: lastLine, ch: lastCh });
+      editor.replaceRange(block, { line: curLine, ch: curCh });
       const newLast = editor.lastLine();
       editor.setCursor({ line: newLast, ch: editor.getLine(newLast).length });
       if (this.settings.focusNoteAfterCapture) {

@@ -20,6 +20,7 @@ Obsidian's split-pane workflow is great for taking notes while reading or watchi
 
 - **Region selection** — draw a box over the exact area you want (e.g. just the video player), then capture it repeatedly with a single hotkey.
 - **Works on any site** — no whitelist, no adapters needed.
+- **Inserts at cursor position** — the screenshot block is placed exactly where your cursor is in the note, not forced to the bottom.
 - **Automatic note insertion** — the screenshot is saved to your vault and a formatted Markdown block (image + timestamp) is appended to your active note instantly.
 - **Configurable template** — customise exactly how the block looks using `{{SCREENSHOT}}` and `{{TIMESTAMP}}` placeholders.
 - **Two timestamp modes** — elapsed time since your first capture (`00:04`) or current wall-clock time (`11:38:12`).
@@ -29,14 +30,15 @@ Obsidian's split-pane workflow is great for taking notes while reading or watchi
 
 ## ⌨️ Commands & Hotkeys
 
-| Command | Suggested hotkey | What it does |
+| Command | Default hotkey | What it does |
 |---|---|---|
-| **Define capture region** | `Alt+K` | Shows a drag overlay; draw a box over the area you want to capture. |
-| **Capture screenshot of defined region** | `Alt+G` | Captures the saved region and inserts it into your active note. |
+| **Define capture region** | `Alt+R` | Shows a drag overlay; draw a box over the area you want to capture. |
+| **Capture screenshot of defined region** | `Alt+C` | Captures the saved region and inserts it at your cursor position in the active note. |
 
-Assign hotkeys in **Settings → Hotkeys** — search for "webview screenshot".
+Assign or change hotkeys in **Settings → Hotkeys** — search for "webview screenshot".
 
 > Tip: Press **Define capture region** once per session to lock onto the video player, then press **Capture** as many times as you like without redrawing.
+
 
 ---
 

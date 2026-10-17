@@ -62,12 +62,14 @@ export default class WebviewScreenshotPlugin extends Plugin {
 		this.addCommand({
 			id: 'define-capture-region',
 			name: 'Define capture region',
+			hotkeys: [{ modifiers: ['Alt'], key: 'r' }],
 			callback: () => this.startRegionSelection(),
 		});
 
 		this.addCommand({
 			id: 'capture-region-screenshot',
 			name: 'Capture screenshot of defined region',
+			hotkeys: [{ modifiers: ['Alt'], key: 'c' }],
 			callback: async () => {
 				if (!this.captureRegion) {
 					new Notice('No capture region defined. Use "Define capture region" first.');
@@ -247,16 +249,18 @@ export default class WebviewScreenshotPlugin extends Plugin {
 				return;
 			}
 
-			const editor   = view.editor;
-			const lastLine = editor.lastLine();
-			const lastCh   = editor.getLine(lastLine).length;
+			const editor  = view.editor;
+			const cursor  = editor.getCursor();              // current caret position
+			const curLine = cursor.line;
+			const curCh   = editor.getLine(curLine).length;  // go to end of that line
 
-			// Prepend a newline if the last line is not empty
-			if (editor.getLine(lastLine).trim() !== '') {
+			// Always start block on a new line (the default template already begins
+			// with \n, but guard against a custom template that might not).
+			if (!block.startsWith('\n')) {
 				block = '\n' + block;
 			}
 
-			editor.replaceRange(block, { line: lastLine, ch: lastCh });
+			editor.replaceRange(block, { line: curLine, ch: curCh });
 
 			// Move cursor to end of inserted block
 			const newLast = editor.lastLine();
