@@ -62,12 +62,14 @@ export default class WebviewScreenshotPlugin extends Plugin {
 		this.addCommand({
 			id: 'define-capture-region',
 			name: 'Define capture region',
+			hotkeys: [{ modifiers: ['Alt'], key: 'r' }],
 			callback: () => this.startRegionSelection(),
 		});
 
 		this.addCommand({
 			id: 'capture-region-screenshot',
 			name: 'Capture screenshot of defined region',
+			hotkeys: [{ modifiers: ['Alt'], key: 'c' }],
 			callback: async () => {
 				if (!this.captureRegion) {
 					new Notice('No capture region defined. Use "Define capture region" first.');
