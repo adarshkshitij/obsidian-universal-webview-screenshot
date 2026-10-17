@@ -289,12 +289,13 @@ var WebviewScreenshotPlugin = class extends import_obsidian2.Plugin {
         return;
       }
       const editor = view.editor;
-      const lastLine = editor.lastLine();
-      const lastCh = editor.getLine(lastLine).length;
-      if (editor.getLine(lastLine).trim() !== "") {
+      const cursor = editor.getCursor();
+      const curLine = cursor.line;
+      const curCh = editor.getLine(curLine).length;
+      if (!block.startsWith("\n")) {
         block = "\n" + block;
       }
-      editor.replaceRange(block, { line: lastLine, ch: lastCh });
+      editor.replaceRange(block, { line: curLine, ch: curCh });
       const newLast = editor.lastLine();
       editor.setCursor({ line: newLast, ch: editor.getLine(newLast).length });
       if (this.settings.focusNoteAfterCapture) {
